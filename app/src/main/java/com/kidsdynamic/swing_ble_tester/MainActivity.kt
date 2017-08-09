@@ -17,9 +17,6 @@ import android.widget.AdapterView
 import android.widget.ScrollView
 import java.util.*
 
-
-
-
 class MainActivity : AppCompatActivity() {
 
     private var bleList = mutableMapOf<String, RxBleDevice>()
