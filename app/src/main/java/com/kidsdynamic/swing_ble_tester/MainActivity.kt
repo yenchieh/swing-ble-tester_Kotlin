@@ -11,11 +11,17 @@ import rx.Subscription
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import com.polidea.rxandroidble.RxBleConnection
-import android.util.Log
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ScrollView
+import com.android.volley.*
+import com.android.volley.toolbox.JsonObjectRequest
+import com.android.volley.toolbox.Volley
+import org.jetbrains.anko.startActivity
+import org.jetbrains.anko.startActivityForResult
 import java.util.*
+import org.json.JSONObject
+
 
 class MainActivity : AppCompatActivity() {
 
@@ -32,6 +38,7 @@ class MainActivity : AppCompatActivity() {
     private val TEST_DATA_UUID = UUID.fromString("0000ffaf-0000-1000-8000-00805f9b34fb")
     private var mAutoScrolling = false
     private lateinit var mCompany: String
+    private val baseUrl = "https://childrenlab.com:8110/api/final"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,17 +52,24 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun attachListener() {
-        startButton.setOnClickListener { v ->
-            startBle()
+        startButton.setOnClickListener { _ ->
+            if (startButton.text == "START TEST") {
+//                val intent = Intent(this, javaClass<DeviceListActivity>())
+                startActivityForResult<DeviceListActivity>(1)
+//                startBle()
+            } else {
+                stopBle()
+            }
+
+
         }
 
-        autoScrolling.setOnCheckedChangeListener({ v, b ->
-            updateLog("Checked: $b")
+        autoScrolling.setOnCheckedChangeListener({ _, b ->
             mAutoScrolling = b
         })
 
         val options = resources.getStringArray(R.array.company_array)
-        company.onItemSelectedListener = object: AdapterView.OnItemSelectedListener {
+        company.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onNothingSelected(p0: AdapterView<*>?) {
                 TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
             }
@@ -68,13 +82,28 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun startBle() {
+        runOnUiThread({ startButton.text = "STOP TEST" })
         val rxBleClient = RxBleClient.create(this)
-
+        updateLog("Scanning....")
         scanSubscription = rxBleClient.scanBleDevices()
                 .subscribe { rxBleScanResult ->
                     receiveDevice(rxBleScanResult)
                 }
 
+    }
+
+    fun stopBle() {
+        runOnUiThread({ startButton.text = "START TEST" })
+        if (scanSubscription.isUnsubscribed) {
+            scanSubscription.unsubscribe()
+        }
+
+
+
+        if (bleSubscription.isUnsubscribed) {
+            bleSubscription.unsubscribe()
+        }
+        bleList = mutableMapOf()
     }
 
     fun receiveDevice(rxBleScanResult: RxBleScanResult) {
@@ -90,7 +119,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun connectDevice() {
-        if(bleList.isEmpty() || bleList[DEVICE_NAME] == null) {
+        if (bleList.isEmpty() || bleList[DEVICE_NAME] == null) {
             return
         }
 
@@ -98,7 +127,6 @@ class MainActivity : AppCompatActivity() {
         val subscription = bleList[DEVICE_NAME]?.establishConnection(this, false) // <-- autoConnect flag
                 ?.subscribe(
                         { rxBleConnection ->
-
                             // All GATT operations are done through the rxBleConnection.
                             updateLog("Connection established to ${DEVICE_NAME}. Mac ID: ${bleList[DEVICE_NAME]?.macAddress}")
                             updateDeviceName(bleList[DEVICE_NAME]?.name)
@@ -113,15 +141,19 @@ class MainActivity : AppCompatActivity() {
 
                         }
                 )
+
+        subscription?.let {
+            this.bleSubscription = subscription
+        }
     }
 
     fun discoverServices(rxBleConnection: RxBleConnection) {
         rxBleConnection.discoverServices()
                 .subscribe(
                         { services ->
-                            for(service in services.bluetoothGattServices) {
+                            for (service in services.bluetoothGattServices) {
                                 println("Service UUID: ${service.uuid}")
-                                for(character in service.characteristics) {
+                                for (character in service.characteristics) {
                                     println("Chatacter: ${character.uuid}")
                                 }
 
@@ -136,7 +168,7 @@ class MainActivity : AppCompatActivity() {
         data[0] = 0x01
         rxBleConnection.writeCharacteristic(ENABLE_DEVICE_UUID, data)
                 .subscribe(
-                        { characteristicValue ->
+                        { _ ->
                             updateLog("Enabled device")
                             enableTest(rxBleConnection)
                         },
@@ -156,7 +188,7 @@ class MainActivity : AppCompatActivity() {
 
         rxBleConnection.writeCharacteristic(TEST_START_UUID, data)
                 .subscribe(
-                        { characteristicValue ->
+                        { _ ->
                             updateLog("Enable successfully")
 //                            sendTimestamp(rxBleConnection)
                             startTest(rxBleConnection)
@@ -170,18 +202,20 @@ class MainActivity : AppCompatActivity() {
 
     fun startTest(rxBleConnection: RxBleConnection) {
         updateLog("Start getting data............")
-        var subscription = rxBleConnection.readCharacteristic(TEST_DATA_UUID)
+        rxBleConnection.readCharacteristic(TEST_DATA_UUID)
                 .subscribe(
                         { characteristicValue ->
-                            if(characteristicValue == null) {
+                            if (characteristicValue == null) {
                                 updateLog("Read null from test Data")
                                 return@subscribe
                             }
                             updateLog("Value Length: ${characteristicValue.size}")
-                            for(b in characteristicValue) {
+                            for (b in characteristicValue) {
                                 updateLog("Byte: $b")
                             }
                             updateLog("---------Success-------")
+
+                            uploadResult(bleList[DEVICE_NAME]?.macAddress, characteristicValue, true)
                         }
                 )
     }
@@ -193,7 +227,7 @@ class MainActivity : AppCompatActivity() {
         val timestampBytes = longToBytes(unixTime)
         rxBleConnection.writeCharacteristic(TIME_UUID, timestampBytes)
                 .subscribe(
-                        { characteristicValue ->
+                        { _ ->
                             updateLog("Send timestamp successfully")
                             getMacID(rxBleConnection)
                         },
@@ -215,25 +249,56 @@ class MainActivity : AppCompatActivity() {
                 )
     }
 
-    fun updateLog(log: String) {
-        runOnUiThread({logText.text = "${logText.text}\n ${log}"})
+    fun uploadResult(macId: String?, resultData: ByteArray, success: Boolean) {
+        if (macId == null) {
+            updateLog("--------- Fail Upload data because MAC ID = null -------")
+            return
+        }
+        val jsonBody = JSONObject("{\"mac_id\":\"" + macId + "\", \"x_max\":\"" + resultData[0] +
+                "\", \"x_min\":\"" + resultData[1] + "\", \"y_max\":\"" + resultData[2] +
+                "\", \"y_min\":\"" + resultData[3] + "\" , \"uv_max\":\"" + (resultData[4].toString() + "" + resultData[5]) +
+                "\", \"uv_min\":\"" + (resultData[5].toString() + " " + resultData[6]) +
+                "\", \"company\":\"" + mCompany +
+                "\", \"mac_id\":\"" + macId + "\", \"result\":" + success + "}")
 
-        if(mAutoScrolling){
+        val request = object : JsonObjectRequest(Request.Method.POST, baseUrl, jsonBody, Response.Listener<JSONObject> {
+            //Success response
+            updateLog("Upload to backend successfully")
+            stopBle()
+        }, Response.ErrorListener { error ->
+            error.printStackTrace()
+            updateLog("upload result error")
+            updateError("Error on uploading test result")
+            stopBle()
+        }) {
+            @Throws(AuthFailureError::class)
+            override fun getHeaders(): Map<String, String> {
+                val params = mutableMapOf<String, String>()
+                params.put("X-AUTH-TOKEN", "50ddcb9f1da9b08c2892ba58b694859e")
+                return params
+            }
+        }
+        val queue = Volley.newRequestQueue(this)
+        queue.add(request)
+    }
+
+    fun updateLog(log: String) {
+        runOnUiThread({ logText.text = "${logText.text}\n ${log}" })
+
+        if (mAutoScrolling) {
             logScroll.postDelayed({ logScroll.fullScroll(ScrollView.FOCUS_DOWN) }, 500)
         }
-
-
     }
 
     fun updateError(err: String?) {
-        runOnUiThread({errorMessage.text = err})
+        runOnUiThread({ errorMessage.text = err })
     }
 
     fun updateDeviceName(deviceName: String?) {
         runOnUiThread({ deviceNameText.text = deviceName })
     }
 
-    fun udpateDeviceStatus(status: String?) {
+    fun updateDeviceStatus(status: String?) {
         runOnUiThread({ deviceStatus.text = status })
     }
 
@@ -252,8 +317,8 @@ class MainActivity : AppCompatActivity() {
 
         val stringChars = String(hexChars)
         var newString = ""
-        for(i in stringChars.indices step 2) {
-            newString = "${stringChars.substring(i, i+2)}${newString}"
+        for (i in stringChars.indices step 2) {
+            newString = "${stringChars.substring(i, i + 2)}${newString}"
         }
         return newString
     }

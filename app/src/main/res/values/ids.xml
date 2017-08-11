@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="deviceName" type="id" />
+    <item name="deviceMacId" type="id" />
+    <item name="listItemContainer" type="id" />
+</resources>

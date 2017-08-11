@@ -8,7 +8,7 @@
 
     <Button
         android:id="@+id/startButton"
-        android:text="Start Test"
+        android:text="START TEST"
         android:layout_width="match_parent"
         android:layout_height="50dp"
         app:layout_constraintStart_toStartOf="parent"
