@@ -10,6 +10,7 @@ import com.polidea.rxandroidble.RxBleScanResult
 import rx.Subscription
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
+import android.support.v7.widget.Toolbar
 import com.polidea.rxandroidble.RxBleConnection
 import android.view.View
 import android.widget.AdapterView
@@ -25,7 +26,6 @@ import org.json.JSONObject
 
 class MainActivity : AppCompatActivity() {
 
-    private var bleList = mutableMapOf<String, RxBleDevice>()
     private lateinit var scanSubscription: Subscription
     private lateinit var bleSubscription: Subscription
 
@@ -36,13 +36,21 @@ class MainActivity : AppCompatActivity() {
     private val TIME_UUID = UUID.fromString("0000ffa3-0000-1000-8000-00805f9b34fb")
     private val MAC_UUID = UUID.fromString("0000ffa6-0000-1000-8000-00805f9b34fb")
     private val TEST_DATA_UUID = UUID.fromString("0000ffaf-0000-1000-8000-00805f9b34fb")
+    private val CHOOSE_DEVICE_ACTIVITY_ID = 101
+    private var macAddress: String = ""
+    private lateinit var connectDevice: RxBleDevice
+
     private var mAutoScrolling = false
     private lateinit var mCompany: String
     private val baseUrl = "https://childrenlab.com:8110/api/final"
 
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        mainToolBar.setTitle(R.string.main_title)
+        setSupportActionBar(mainToolBar)
 
         val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
         val REQUEST_ENABLE_BT = 1
@@ -54,10 +62,12 @@ class MainActivity : AppCompatActivity() {
     fun attachListener() {
         startButton.setOnClickListener { _ ->
             if (startButton.text == "START TEST") {
+                runOnUiThread({ startButton.text = "STOP TEST" })
 //                val intent = Intent(this, javaClass<DeviceListActivity>())
-                startActivityForResult<DeviceListActivity>(1)
+                startActivityForResult<DeviceListActivity>(CHOOSE_DEVICE_ACTIVITY_ID)
 //                startBle()
             } else {
+                runOnUiThread({ startButton.text = "START TEST" })
                 stopBle()
             }
 
@@ -81,6 +91,20 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        println("Activity Result ${requestCode} ${resultCode}")
+        if(requestCode == CHOOSE_DEVICE_ACTIVITY_ID && data != null) {
+
+            println(data.extras["macAddress"])
+            macAddress = data.extras["macAddress"] as String
+
+            connectDevice()
+        }
+
+    }
+
     fun startBle() {
         runOnUiThread({ startButton.text = "STOP TEST" })
         val rxBleClient = RxBleClient.create(this)
@@ -94,50 +118,55 @@ class MainActivity : AppCompatActivity() {
 
     fun stopBle() {
         runOnUiThread({ startButton.text = "START TEST" })
+/*
         if (scanSubscription.isUnsubscribed) {
             scanSubscription.unsubscribe()
         }
 
+*/
 
 
         if (bleSubscription.isUnsubscribed) {
             bleSubscription.unsubscribe()
         }
-        bleList = mutableMapOf()
+        macAddress = ""
+
+        updateLog("Stopped test")
     }
 
     fun receiveDevice(rxBleScanResult: RxBleScanResult) {
 
-        if (rxBleScanResult.bleDevice.name == DEVICE_NAME && bleList[rxBleScanResult.bleDevice.name] == null) {
+/*        if (rxBleScanResult.bleDevice.name == DEVICE_NAME && bleList[rxBleScanResult.bleDevice.name] == null) {
             bleList[DEVICE_NAME] = rxBleScanResult.bleDevice
             scanSubscription.unsubscribe()
             logText.text = "${logText.text}\nSwing Device Found"
             connectDevice()
 
-        }
+        }*/
 
     }
 
     fun connectDevice() {
-        if (bleList.isEmpty() || bleList[DEVICE_NAME] == null) {
+        if (macAddress == "") {
             return
         }
+        val rxBleClient = RxBleClient.create(this)
+
+        connectDevice = rxBleClient.getBleDevice(macAddress)
 
         updateLog("Start to connecting device...")
-        val subscription = bleList[DEVICE_NAME]?.establishConnection(this, false) // <-- autoConnect flag
+        val subscription = connectDevice.establishConnection(this, false) // <-- autoConnect flag
                 ?.subscribe(
                         { rxBleConnection ->
                             // All GATT operations are done through the rxBleConnection.
-                            updateLog("Connection established to ${DEVICE_NAME}. Mac ID: ${bleList[DEVICE_NAME]?.macAddress}")
-                            updateDeviceName(bleList[DEVICE_NAME]?.name)
+                            updateLog("Connection established to ${DEVICE_NAME}. Mac ID: ${connectDevice.macAddress}")
+                            updateDeviceName(connectDevice.name)
                             discoverServices(rxBleConnection)
                             enableSwing(rxBleConnection)
 
                         },
                         { throwable ->
-
-                            updateLog("Error occur: ${throwable.message}")
-                            updateError(throwable.message)
+                            updateError("Connect device: ${throwable.message}")
 
                         }
                 )
@@ -174,7 +203,7 @@ class MainActivity : AppCompatActivity() {
                         },
                         { throwable ->
                             throwable.printStackTrace()
-                            updateError(throwable.message)
+                            updateError("enable string: ${throwable.message}")
                         }
                 )
     }
@@ -195,7 +224,7 @@ class MainActivity : AppCompatActivity() {
                         },
                         { throwable ->
                             throwable.printStackTrace()
-                            updateError(throwable.message)
+                            updateError("enableTest: ${throwable.message}")
                         }
                 )
     }
@@ -215,7 +244,7 @@ class MainActivity : AppCompatActivity() {
                             }
                             updateLog("---------Success-------")
 
-                            uploadResult(bleList[DEVICE_NAME]?.macAddress, characteristicValue, true)
+                            uploadResult(connectDevice.macAddress, characteristicValue, true)
                         }
                 )
     }

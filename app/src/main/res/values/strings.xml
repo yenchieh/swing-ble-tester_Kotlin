@@ -7,4 +7,7 @@
         <item>Other Company</item>
     </string-array>
 
+    <string name="main_title">Swing BLE Tester</string>
+    <string name="device_list_title">Choose Device</string>
+
 </resources>
