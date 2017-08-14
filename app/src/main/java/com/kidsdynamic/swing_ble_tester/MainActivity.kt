@@ -1,30 +1,42 @@
 package com.kidsdynamic.swing_ble_tester
 
-import android.support.v7.app.AppCompatActivity
-import android.os.Bundle
-
-import kotlinx.android.synthetic.main.activity_main.*
-import com.polidea.rxandroidble.RxBleClient
-import com.polidea.rxandroidble.RxBleDevice
-import com.polidea.rxandroidble.RxBleScanResult
-import rx.Subscription
-import android.bluetooth.BluetoothAdapter
+import android.Manifest
 import android.content.Intent
-import android.support.v7.widget.Toolbar
-import com.polidea.rxandroidble.RxBleConnection
+import android.content.pm.PackageManager
+import android.os.Bundle
+import android.support.v7.app.AppCompatActivity
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ScrollView
-import com.android.volley.*
+import android.widget.Toast
+import com.android.volley.AuthFailureError
+import com.android.volley.Request
+import com.android.volley.Response
 import com.android.volley.toolbox.JsonObjectRequest
 import com.android.volley.toolbox.Volley
-import org.jetbrains.anko.startActivity
+import com.polidea.rxandroidble.RxBleClient
+import com.polidea.rxandroidble.RxBleConnection
+import com.polidea.rxandroidble.RxBleDevice
+import com.polidea.rxandroidble.RxBleScanResult
+import kotlinx.android.synthetic.main.activity_main.*
 import org.jetbrains.anko.startActivityForResult
-import java.util.*
 import org.json.JSONObject
+import rx.Subscription
+import java.util.*
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
+import android.content.Context
+import android.support.annotation.NonNull
+import android.support.v4.app.ActivityCompat
+import android.support.v4.content.ContextCompat
 
 
 class MainActivity : AppCompatActivity() {
+
+    val BLUETOOTH_PERMISSION = 0x1000
+    val BLUETOOTH_ADMIN_PERMISSION = 0x1001
+    val PERMISSION_REQUEST_COARSE_LOCATION = 1
+    val BLUETOOTH_PRIVILEGED_PERMISSION = 1
 
     private lateinit var scanSubscription: Subscription
     private lateinit var bleSubscription: Subscription
@@ -44,6 +56,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var mCompany: String
     private val baseUrl = "https://childrenlab.com:8110/api/final"
 
+    private var mBluetoothAdapter: BluetoothAdapter? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,9 +65,39 @@ class MainActivity : AppCompatActivity() {
         mainToolBar.setTitle(R.string.main_title)
         setSupportActionBar(mainToolBar)
 
-        val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
-        val REQUEST_ENABLE_BT = 1
-        this.startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT)
+        if (!getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
+            Toast.makeText(this, "BLE doesn't support", Toast.LENGTH_LONG).show()
+            finish()
+        }
+
+        // Initializes Bluetooth adapter.
+        val bluetoothManager: BluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+        mBluetoothAdapter = bluetoothManager.getAdapter()
+
+        // displays a dialog requesting user permission to enable Bluetooth.
+        if (mBluetoothAdapter == null) {
+            Toast.makeText(this, "Start enable device", Toast.LENGTH_LONG).show()
+
+            val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+            startActivityForResult(enableBtIntent, 1)
+        }
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, Array(1, {android.Manifest.permission.BLUETOOTH}), BLUETOOTH_PERMISSION);
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADMIN) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, Array(1, {android.Manifest.permission.BLUETOOTH_ADMIN}), BLUETOOTH_ADMIN_PERMISSION);
+        }
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, Array(1, {android.Manifest.permission.ACCESS_COARSE_LOCATION}), PERMISSION_REQUEST_COARSE_LOCATION);
+        }
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_PRIVILEGED) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, Array(1, {android.Manifest.permission.BLUETOOTH_PRIVILEGED}), BLUETOOTH_PRIVILEGED_PERMISSION);
+        }
+
+
 
         attachListener()
     }
@@ -350,5 +393,22 @@ class MainActivity : AppCompatActivity() {
             newString = "${stringChars.substring(i, i + 2)}${newString}"
         }
         return newString
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, @NonNull permissions: Array<String>, @NonNull grantResults: IntArray) {
+
+        when (requestCode) {
+            BLUETOOTH_PERMISSION ->
+                if (grantResults[0] != PackageManager.PERMISSION_GRANTED) {
+                    Toast.makeText(this, "Bluetooth permission denied", Toast.LENGTH_SHORT).show();
+                }
+
+             BLUETOOTH_ADMIN_PERMISSION ->
+                if (grantResults[0] != PackageManager.PERMISSION_GRANTED) {
+                    Toast.makeText(this, "Bluetooth admin permission denied", Toast.LENGTH_SHORT).show();
+                }
+        }
+
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
     }
 }
