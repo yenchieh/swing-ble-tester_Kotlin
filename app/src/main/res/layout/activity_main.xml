@@ -112,11 +112,6 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content" />
 
-            <android.support.v7.widget.AppCompatCheckBox
-                android:text="Auto Connect"
-                android:id="@+id/autoCon"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content" />
         </LinearLayout>
 
 

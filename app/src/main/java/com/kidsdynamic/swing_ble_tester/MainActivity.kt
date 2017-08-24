@@ -83,18 +83,18 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, Array(1, {android.Manifest.permission.BLUETOOTH}), BLUETOOTH_PERMISSION);
+            ActivityCompat.requestPermissions(this, Array(1, { android.Manifest.permission.BLUETOOTH }), BLUETOOTH_PERMISSION);
         }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADMIN) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, Array(1, {android.Manifest.permission.BLUETOOTH_ADMIN}), BLUETOOTH_ADMIN_PERMISSION);
+            ActivityCompat.requestPermissions(this, Array(1, { android.Manifest.permission.BLUETOOTH_ADMIN }), BLUETOOTH_ADMIN_PERMISSION);
         }
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, Array(1, {android.Manifest.permission.ACCESS_COARSE_LOCATION}), PERMISSION_REQUEST_COARSE_LOCATION);
+            ActivityCompat.requestPermissions(this, Array(1, { android.Manifest.permission.ACCESS_COARSE_LOCATION }), PERMISSION_REQUEST_COARSE_LOCATION);
         }
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_PRIVILEGED) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, Array(1, {android.Manifest.permission.BLUETOOTH_PRIVILEGED}), BLUETOOTH_PRIVILEGED_PERMISSION);
+            ActivityCompat.requestPermissions(this, Array(1, { android.Manifest.permission.BLUETOOTH_PRIVILEGED }), BLUETOOTH_PRIVILEGED_PERMISSION);
         }
 
 
@@ -104,16 +104,7 @@ class MainActivity : AppCompatActivity() {
 
     fun attachListener() {
         startButton.setOnClickListener { _ ->
-            if (startButton.text == "START TEST") {
-                runOnUiThread({ startButton.text = "STOP TEST" })
-//                val intent = Intent(this, javaClass<DeviceListActivity>())
-                startActivityForResult<DeviceListActivity>(CHOOSE_DEVICE_ACTIVITY_ID)
-//                startBle()
-            } else {
-                runOnUiThread({ startButton.text = "START TEST" })
-                stopBle()
-            }
-
+            startActivityForResult<DeviceListActivity>(CHOOSE_DEVICE_ACTIVITY_ID)
 
         }
 
@@ -138,7 +129,7 @@ class MainActivity : AppCompatActivity() {
         super.onActivityResult(requestCode, resultCode, data)
 
         println("Activity Result ${requestCode} ${resultCode}")
-        if(requestCode == CHOOSE_DEVICE_ACTIVITY_ID && data != null) {
+        if (requestCode == CHOOSE_DEVICE_ACTIVITY_ID && data != null) {
 
             println(data.extras["macAddress"])
             macAddress = data.extras["macAddress"] as String
@@ -146,35 +137,6 @@ class MainActivity : AppCompatActivity() {
             connectDevice()
         }
 
-    }
-
-    fun startBle() {
-        runOnUiThread({ startButton.text = "STOP TEST" })
-        val rxBleClient = RxBleClient.create(this)
-        updateLog("Scanning....")
-        scanSubscription = rxBleClient.scanBleDevices()
-                .subscribe { rxBleScanResult ->
-                    receiveDevice(rxBleScanResult)
-                }
-
-    }
-
-    fun stopBle() {
-        runOnUiThread({ startButton.text = "START TEST" })
-/*
-        if (scanSubscription.isUnsubscribed) {
-            scanSubscription.unsubscribe()
-        }
-
-*/
-
-
-        if (bleSubscription.isUnsubscribed) {
-            bleSubscription.unsubscribe()
-        }
-        macAddress = ""
-
-        updateLog("Stopped test")
     }
 
     fun receiveDevice(rxBleScanResult: RxBleScanResult) {
@@ -336,12 +298,10 @@ class MainActivity : AppCompatActivity() {
         val request = object : JsonObjectRequest(Request.Method.POST, baseUrl, jsonBody, Response.Listener<JSONObject> {
             //Success response
             updateLog("Upload to backend successfully")
-            stopBle()
         }, Response.ErrorListener { error ->
             error.printStackTrace()
             updateLog("upload result error")
             updateError("Error on uploading test result")
-            stopBle()
         }) {
             @Throws(AuthFailureError::class)
             override fun getHeaders(): Map<String, String> {
@@ -403,7 +363,7 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this, "Bluetooth permission denied", Toast.LENGTH_SHORT).show();
                 }
 
-             BLUETOOTH_ADMIN_PERMISSION ->
+            BLUETOOTH_ADMIN_PERMISSION ->
                 if (grantResults[0] != PackageManager.PERMISSION_GRANTED) {
                     Toast.makeText(this, "Bluetooth admin permission denied", Toast.LENGTH_SHORT).show();
                 }
